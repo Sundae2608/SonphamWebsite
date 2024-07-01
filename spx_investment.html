@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wealth Visualization</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<h1>Wealth Visualization</h1>
+
+<div class="controls">
+    <label for="startingWealth">Starting Wealth:</label>
+    <input type="number" id="startingWealth" value="1000">
+    <div>
+        <label for="regularContribution">Regular Contribution:</label>
+        <input type="number" id="regularContribution" value="100">
+        <label for="frequency">Frequency:</label>
+        <select id="frequency">
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="yearly">Yearly</option>
+        </select>
+        <div>
+            <input type="checkbox" id="adjustContributionInflation">
+            <label for="adjustContributionInflation">Adjust Contribution to Inflation</label>
+        </div>
+    </div>
+    <div>
+        <label for="startDate">Start Date:</label>
+        <input type="month" id="startDate">
+        <label for="endDate">End Date:</label>
+        <input type="month" id="endDate">
+    </div>
+    <div class="range-slider" id="dateRange">
+        <div class="track"></div>
+        <div class="range"></div>
+        <div class="thumb" id="thumb-left"></div>
+        <div class="thumb" id="thumb-right"></div>
+    </div>
+    <div>
+        <input type="checkbox" id="logScale" checked>
+        <label for="logScale">Log Scale</label>
+    </div>
+    <div>
+        <input type="checkbox" id="reinvestDividend">
+        <label for="reinvestDividend">Reinvest Dividend</label>
+    </div>
+    <div>
+        <input type="checkbox" id="adjustForInflation">
+        <label for="adjustForInflation">Adjust for Inflation</label>
+    </div>
+</div>
+
+<div id="chart"></div>
+
+<script>
+    // Load the JSON data
+    d3.json("spdata.json").then(function(data) {
+        // Parse the date and convert price, dividend, and CPI to numbers
+        data.forEach(function(d) {
+            d.Date = d3.timeParse("%Y-%m")(d.Date);
+            d.P = +d.P;
+            d.D = +d.D; // Dividend
+            d.CPI = +d.CPI; // CPI
+        });
+
+        console.log(data);
+
+        // Set the dimensions and margins of the graph
+        var margin = {top: 20, right: 230, bottom: 30, left: 50},
+            width = 1000 - margin.left - margin.right,
+            height = 400 - margin.top - margin.bottom;
+
+        // Append the svg object to the body of the page
+        var svg = d3.select("#chart").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        // Add X axis
+        var x = d3.scaleTime().range([0, width]);
+        var xAxis = svg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .attr("class", "axis");
+
+        // Add Y axis (log scale)
+        var y = d3.scaleLog().range([height, 0]);
+        var yAxis = svg.append("g").attr("class", "axis");
+
+        // Add major horizontal grid lines
+        var yGridMajor = svg.append("g")
+            .attr("class", "grid grid-major")
+            .call(d3.axisLeft(y)
+                .ticks(5)
+                .tickSize(-width)
+                .tickFormat("")
+            );
+
+        // Add minor horizontal grid lines
+        var yGridMinor = svg.append("g")
+            .attr("class", "grid grid-minor")
+            .call(d3.axisLeft(y)
+                .ticks(25)
+                .tickSize(-width)
+                .tickFormat("")
+            );
+
+        // Add the wealth line with smoothing
+        var wealthLine = d3.line()
+            .x(d => x(d.Date))
+            .y(d => y(d.Wealth))
+            .curve(d3.curveBasis);
+
+        var inflationAdjustedWealthLine = d3.line()
+            .x(d => x(d.Date))
+            .y(d => y(d.InflationAdjustedWealth))
+            .curve(d3.curveBasis);
+
+        var wealthPath = svg.append("path").datum([]).attr("class", "wealth-line");
+
+        // Create a tooltip group
+        var focus = svg.append("g").attr("class", "focus").style("display", "none");
+
+        focus.append("circle").attr("r", 2.5);
+
+        var tooltipRect = focus.append("rect")
+            .attr("height", 60)
+            .attr("x", 10)
+            .attr("y", -30)
+            .attr("rx", 4)
+            .attr("ry", 4);
+
+        focus.append("text").attr("class", "tooltip-date")
+            .attr("x", 18)
+            .attr("y", -10)
+            .attr("dy", "0.35em");
+
+        var tooltipWealthText = focus.append("text").attr("class", "tooltip-wealth")
+            .attr("x", 18)
+            .attr("y", 10)
+            .attr("dy", "0.35em");
+
+        // Create vertical line that follows the tooltip
+        var verticalLine = svg.append("line")
+            .attr("class", "vertical-line")
+            .attr("y1", 0)
+            .attr("y2", height)
+            .style("stroke", "steelblue")
+            .style("stroke-width", "1px")
+            .style("stroke-dasharray", "4")
+            .style("display", "none");
+
+        svg.append("rect")
+            .attr("class", "overlay")
+            .attr("width", width)
+            .attr("height", height)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", () => {
+                focus.style("display", null);
+                verticalLine.style("display", null);
+            })
+            .on("mouseout", () => {
+                focus.style("display", "none");
+                verticalLine.style("display", "none");
+            })
+            .on("mousemove", mousemove);
+
+        var bisectDate = d3.bisector(d => d.Date).left;
+
+        function mousemove(event) {
+            var x0 = x.invert(d3.pointer(event, this)[0]),
+                i = bisectDate(data, x0, 1),
+                d0 = data[i - 1],
+                d1 = data[i],
+                d = x0 - d0.Date > d1.Date - x0 ? d1 : d0;
+            var wealth = d3.select("#adjustForInflation").property("checked") ? d.InflationAdjustedWealth : d.Wealth;
+            focus.attr("transform", "translate(" + x(d.Date) + "," + y(wealth) + ")");
+            focus.select(".tooltip-date").text("Date: " + d3.timeFormat("%Y-%m")(d.Date));
+            var wealthText = "Wealth: " + d3.format("$,.2f")(wealth);
+            tooltipWealthText.text(wealthText);
+
+            var textWidth = Math.max(tooltipWealthText.node().getComputedTextLength(), focus.select(".tooltip-date").node().getComputedTextLength());
+            tooltipRect.attr("width", textWidth + 20);
+
+            verticalLine.attr("x1", x(d.Date)).attr("x2", x(d.Date)).attr("y1", 0).attr("y2", height);
+        }
+
+        function updateChart(startDate, endDate, startingWealth, useLogScale, reinvestDividend, adjustForInflation, transition = false) {
+            var filteredData = data.filter(d => d.Date >= startDate && d.Date <= endDate);
+            var regularContribution = parseFloat(d3.select("#regularContribution").property("value"));
+            var frequency = d3.select("#frequency").property("value");
+            var adjustContributionInflation = d3.select("#adjustContributionInflation").property("checked");
+            var contributionInterval;
+
+            if (frequency === "monthly") {
+                contributionInterval = 1;
+            } else if (frequency === "quarterly") {
+                contributionInterval = 3;
+            } else if (frequency === "yearly") {
+                contributionInterval = 12;
+            }
+
+            if (filteredData.length > 0) {
+                var initialPrice = filteredData[0].P;
+                var initialCPI = filteredData[0].CPI;
+                filteredData[0].Wealth = startingWealth;
+                filteredData[0].InflationAdjustedWealth = startingWealth;
+                for (var i = 1; i < filteredData.length; i++) {
+                    var prev = filteredData[i - 1];
+                    var curr = filteredData[i];
+                    var monthlyDividend = reinvestDividend ? (prev.Wealth * prev.D / prev.P) / 12 : 0;
+                    var contribution = 0;
+                    if (i % contributionInterval === 0) {
+                        contribution = regularContribution;
+                        if (adjustContributionInflation) {
+                            contribution *= curr.CPI / initialCPI;
+                        }
+                    }
+                    curr.Wealth = prev.Wealth * (curr.P / prev.P) + monthlyDividend + contribution;
+                    curr.InflationAdjustedWealth = curr.Wealth / curr.CPI * initialCPI;
+                }
+            }
+
+            x.domain(d3.extent(filteredData, d => d.Date));
+
+            y = useLogScale ? d3.scaleLog().range([height, 0]) : d3.scaleLinear().range([height, 0]);
+
+            var yDomainData = adjustForInflation ? filteredData.map(d => d.InflationAdjustedWealth) : filteredData.map(d => d.Wealth);
+            y.domain([d3.min(yDomainData), d3.max(yDomainData)]);
+
+            if (transition) {
+                xAxis.transition().duration(750).call(d3.axisBottom(x));
+                yAxis.transition().duration(750).call(d3.axisLeft(y).ticks(5, useLogScale ? "~s" : null));
+                yGridMajor.transition().duration(750).call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(""));
+                yGridMinor.transition().duration(750).call(d3.axisLeft(y).ticks(25).tickSize(-width).tickFormat(""));
+
+                wealthPath.datum(filteredData)
+                    .transition()
+                    .duration(750)
+                    .attr("d", adjustForInflation ? inflationAdjustedWealthLine : wealthLine);
+            } else {
+                xAxis.call(d3.axisBottom(x));
+                yAxis.call(d3.axisLeft(y).ticks(5, useLogScale ? "~s" : null));
+                yGridMajor.call(d3.axisLeft(y).ticks(5).tickSize(-width).tickFormat(""));
+                yGridMinor.call(d3.axisLeft(y).ticks(25).tickSize(-width).tickFormat(""));
+
+                wealthPath.datum(filteredData)
+                    .attr("d", adjustForInflation ? inflationAdjustedWealthLine : wealthLine);
+            }
+        }
+
+        // Slider functionality
+        var rangeSlider = d3.select("#dateRange");
+        var thumbLeft = d3.select("#thumb-left");
+        var thumbRight = d3.select("#thumb-right");
+        var range = d3.select(".range");
+
+        var dragLeft = d3.drag().on("drag", function(event) {
+            var pos = d3.pointer(event)[0];
+            if (pos < 0) pos = 0;
+            if (pos > parseFloat(thumbRight.style("left"))) pos = parseFloat(thumbRight.style("left"));
+            thumbLeft.style("left", pos + "px");
+            range.style("left", pos + "px");
+            updateDates();
+        });
+
+        var dragRight = d3.drag().on("drag", function(event) {
+            var pos = d3.pointer(event)[0];
+            if (pos > rangeSlider.node().offsetWidth) pos = rangeSlider.node().offsetWidth;
+            if (pos < parseFloat(thumbLeft.style("left"))) pos = parseFloat(thumbLeft.style("left"));
+            thumbRight.style("left", pos + "px");
+            range.style("right", (rangeSlider.node().offsetWidth - pos) + "px");
+            updateDates();
+        });
+
+        thumbLeft.call(dragLeft);
+        thumbRight.call(dragRight);
+
+        function updateDates() {
+            var leftValue = parseFloat(thumbLeft.style("left")) / rangeSlider.node().offsetWidth;
+            var rightValue = parseFloat(thumbRight.style("left")) / rangeSlider.node().offsetWidth;
+
+            var startDate = data[Math.floor(leftValue * (data.length - 1))].Date;
+            var endDate = data[Math.floor(rightValue * (data.length - 1))].Date;
+
+            d3.select("#startDate").property("value", d3.timeFormat("%Y-%m")(startDate));
+            d3.select("#endDate").property("value", d3.timeFormat("%Y-%m")(endDate));
+
+            var startingWealth = parseFloat(d3.select("#startingWealth").property("value"));
+            var useLogScale = d3.select("#logScale").property("checked");
+            var reinvestDividend = d3.select("#reinvestDividend").property("checked");
+            var adjustForInflation = d3.select("#adjustForInflation").property("checked");
+
+            updateChart(startDate, endDate, startingWealth, useLogScale, reinvestDividend, adjustForInflation);
+        }
+
+        // Handle input changes
+        d3.selectAll("#startDate, #endDate, #startingWealth, #regularContribution, #frequency, #adjustContributionInflation, #logScale, #reinvestDividend, #adjustForInflation").on("change", function() {
+            var startDate = d3.timeParse("%Y-%m")(d3.select("#startDate").property("value"));
+            var endDate = d3.timeParse("%Y-%m")(d3.select("#endDate").property("value"));
+            var startingWealth = parseFloat(d3.select("#startingWealth").property("value"));
+            var useLogScale = d3.select("#logScale").property("checked");
+            var reinvestDividend = d3.select("#reinvestDividend").property("checked");
+            var adjustForInflation = d3.select("#adjustForInflation").property("checked");
+            updateChart(startDate, endDate, startingWealth, useLogScale, reinvestDividend, adjustForInflation, true);
+
+            var startIndex = data.findIndex(d => d3.timeFormat("%Y-%m")(d.Date) === d3.timeFormat("%Y-%m")(startDate));
+            var endIndex = data.findIndex(d => d3.timeFormat("%Y-%m")(d.Date) === d3.timeFormat("%Y-%m")(endDate));
+
+            if (startIndex !== -1 && endIndex !== -1) {
+                thumbLeft.style("left", (startIndex / (data.length - 1) * 100) + "%");
+                thumbRight.style("left", (endIndex / (data.length - 1) * 100) + "%");
+                range.style("left", (startIndex / (data.length - 1) * 100) + "%");
+                range.style("right", (100 - (endIndex / (data.length - 1) * 100)) + "%");
+            }
+        });
+
+        // Set initial dates and update the chart
+        var initialStartDate = data[0].Date;
+        var initialEndDate = data[data.length - 1].Date;
+        var initialWealth = parseFloat(d3.select("#startingWealth").property("value"));
+        var initialLogScale = d3.select("#logScale").property("checked");
+        var initialReinvestDividend = d3.select("#reinvestDividend").property("checked");
+        var initialAdjustForInflation = d3.select("#adjustForInflation").property("checked");
+
+        d3.select("#startDate").property("value", d3.timeFormat("%Y-%m")(initialStartDate));
+        d3.select("#endDate").property("value", d3.timeFormat("%Y-%m")(initialEndDate));
+
+        thumbLeft.style("left", "0px");
+        thumbRight.style("left", rangeSlider.node().offsetWidth + "px");
+        range.style("left", "0px");
+        range.style("right", "0px");
+
+        updateChart(initialStartDate, initialEndDate, initialWealth, initialLogScale, initialReinvestDividend, initialAdjustForInflation);
+    }).catch(function(error) {
+        console.error('Error loading or parsing data:', error);
+    });
+</script>
+</body>
+</html>
