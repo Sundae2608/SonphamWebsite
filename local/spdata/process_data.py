@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the Excel file
-file_path = "spdata/ie_data.xls"
+file_path = "ie_data.xls"
 xls = pd.ExcelFile(file_path)
 
 # Load the sheet named 'Data' into a DataFrame, skipping the first 7 rows
@@ -35,7 +35,7 @@ df["Date"] = df["Date"].dt.strftime("%Y-%m")
 json_data = df.to_json(orient='records')
 
 # Save the JSON data to a file
-json_file_path = "../spdata.json"
+json_file_path = "../../spdata.json"
 with open(json_file_path, "w") as json_file:
     json_file.write(json_data)
 

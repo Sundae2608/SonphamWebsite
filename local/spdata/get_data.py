@@ -26,7 +26,7 @@ if file_url:
 
     # Download the file
     file_response = requests.get(file_url)
-    with open("spdata/ie_data.xls", "wb") as file:
+    with open("ie_data.xls", "wb") as file:
         file.write(file_response.content)
 
     print("File downloaded successfully!")
