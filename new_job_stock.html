@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meta Stock Price Distribution and Option Value</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-format/2.0.0/d3-format.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Lora', Georgia, serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        .controls {
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .graph-container {
+            display: block;
+        }
+        .graph {
+            margin: 20px 0;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .graph-large {
+            width: 100%;
+        }
+        h1 {
+            margin: 20px 0;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        .axis-title {
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .legend {
+            font-size: 12px;
+        }
+        .legend rect {
+            width: 18px;
+            height: 18px;
+        }
+        label {
+            display: inline-block;
+            margin-bottom: 5px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+        input[type="number"], select {
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Lora', Georgia, serif;
+            font-size: 14px;
+        }
+        input[type="range"] {
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Lora', Georgia, serif;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .expected-utility-results {
+            margin-top: 20px;
+            color: #2c3e50;
+        }
+        .probability-label {
+            font: 16px 'Lora', Georgia, serif;
+            pointer-events: none;
+        }
+        .direction-label {
+            font: 12px 'Lora', Georgia, serif;
+            pointer-events: none;
+        }
+        .vertical-line {
+            stroke: black;
+            stroke-width: 1;
+            stroke-dasharray: 4 4;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: left;
+            font: 12px 'Lora', Georgia, serif;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .progress-indicator {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 14px;
+        }
+        .percentile-line {
+            fill: none;
+            stroke-width: 2;
+        }
+        #expectedUtilityTooltip {
+            position: absolute;
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="graph-container">
+    <h1>Stocks granted</h1>
+    <div class="graph">
+        <div class="controls">
+            <label for="avgPrice">Average Price: </label>
+            <input type="number" id="avgPrice" value="535" step="1" min="0">
+            <br>
+            <label for="numShares">Number of Shares: </label>
+            <input type="number" id="numShares" value="2000" step="1" min="1">
+            <br>
+            <label for="volatility">Volatility: </label>
+            <input type="range" id="volatility" value="15" min="0" max="30" step="1">
+            <span id="volatilityValue">15%</span>
+            <br>
+            <label for="interestRate">Interest Rate: </label>
+            <input type="number" id="interestRate" value="5.25" step="0.25" min="0" max="100">%
+        </div>
+        <svg id="pdfChart" width="400" height="300"></svg>
+        <svg id="shareWorthChart" width="400" height="300"></svg>
+    </div>
+    <h1>Option contracts</h1>
+    <div class="graph">
+        <div class="controls">
+            <label for="strikePrice">Strike Price: </label>
+            <input type="number" id="strikePrice" value="500" step="1" min="0">
+            <br>
+            <label for="optionPrice">Option Price: </label>
+            <input type="number" id="optionPrice" value="12.8" step="1" min="0">
+            <br>
+            <label for="numOptions">Number of Options Contracts: </label>
+            <input type="number" id="numOptions" value="20" step="1" min="1">
+            <br>
+            <label for="optionType">Option Type: </label>
+            <select id="optionType">
+                <option value="call">Call</option>
+                <option value="put">Put</option>
+            </select>
+        </div>
+        <svg id="optionPriceChart" width="520" height="360"></svg>
+        <svg id="optionWorthChart" width="520" height="360"></svg>
+    </div>
+    <h1>No Contracts vs. Contract</h1>
+    <div class="graph">
+        <svg id="combinedNetWorthChart" width="1120" height="400"></svg>
+    </div>
+    <h1>Net Worth vs Stock Price</h1>
+    <div class="graph">
+        <svg id="netWorthVsStockPriceChart" width="1120" height="400"></svg>
+    </div>
+
+    <h1>Expected Utility</h1>
+    <div class="graph">
+        <div class="controls">
+            <label for="baseWealth">Base Wealth: </label>
+            <input type="number" id="baseWealth" value="100000" step="10000" min="0">
+            <br>
+            <label for="gamma">Gamma: </label>
+            <input type="number" id="gamma" value="2" step="0.1" min="0.1" max="10">
+            <br>
+            <label for="numSimulations">Number of Simulations: </label>
+            <input type="number" id="numSimulations" value="10000" step="1000" min="1000">
+            <br>
+            <button id="calculateUtilityBtn">Calculate Utility</button>
+            <span id="progressIndicator" class="progress-indicator"></span>
+        </div>
+        <svg id="expectedUtilityChart" width="1120" height="400"></svg>
+        <div id="expectedUtilityTooltip"></div>
+        <div class="expected-utility-results" id="expectedUtilityResults"></div>
+    </div>
+
+    <div class="graph">
+        <svg id="resultApproximationChart" width="1120" height="400"></svg>
+    </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+<script>
+    // Set dimensions
+    const margin = { top: 20, right: 30, bottom: 40, left: 60 };
+    const smallWidth = 577 - margin.left - margin.right;
+    const smallHeight = 360 - margin.top - margin.bottom;
+    const largeWidth = 1154 - margin.left - margin.right;
+    const largeHeight = 400 - margin.top - margin.bottom;
+
+    // Create SVG containers for all charts
+    const svgPDF = d3.select("#pdfChart")
+        .attr("width", smallWidth + margin.left + margin.right)
+        .attr("height", smallHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgShareWorth = d3.select("#shareWorthChart")
+        .attr("width", smallWidth + margin.left + margin.right)
+        .attr("height", smallHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgOptionPrice = d3.select("#optionPriceChart")
+        .attr("width", smallWidth + margin.left + margin.right)
+        .attr("height", smallHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgOptionWorth = d3.select("#optionWorthChart")
+        .attr("width", smallWidth + margin.left + margin.right)
+        .attr("height", smallHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgCombinedNetWorth = d3.select("#combinedNetWorthChart")
+        .attr("width", largeWidth + margin.left + margin.right)
+        .attr("height", largeHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgNetWorthVsStockPrice = d3.select("#netWorthVsStockPriceChart")
+        .attr("width", largeWidth + margin.left + margin.right)
+        .attr("height", largeHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgExpectedUtility = d3.select("#expectedUtilityChart")
+        .attr("width", largeWidth + margin.left + margin.right)
+        .attr("height", largeHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    const svgResultApproximation = d3.select("#resultApproximationChart")
+        .attr("width", largeWidth + margin.left + margin.right)
+        .attr("height", largeHeight + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    // Create scales for all charts
+    const xPDF = d3.scaleLinear().range([0, smallWidth]);
+    const yPDF = d3.scaleLinear().range([smallHeight, 0]);
+
+    const xShareWorth = d3.scaleLinear().range([0, smallWidth]);
+    const yShareWorth = d3.scaleLinear().range([smallHeight, 0]);
+
+    const xOptionPrice = d3.scaleLinear().range([0, smallWidth]);
+    const yOptionPrice = d3.scaleLinear().range([smallHeight, 0]);
+
+    const xOptionWorth = d3.scaleLinear().range([0, smallWidth]);
+    const yOptionWorth = d3.scaleLinear().range([smallHeight, 0]);
+
+    const xCombinedNetWorth = d3.scaleLinear().range([0, largeWidth]);
+    const yCombinedNetWorth = d3.scaleLinear().range([largeHeight, 0]);
+
+    const xNetWorthVsStockPrice = d3.scaleLinear().range([0, largeWidth]);
+    const yNetWorthVsStockPrice = d3.scaleLinear().range([largeHeight, 0]);
+
+    const xExpectedUtility = d3.scaleLinear().range([0, largeWidth]);
+    const yExpectedUtility = d3.scaleLinear().range([largeHeight, 0]);
+
+    const xResultApproximation = d3.scaleLinear().range([0, largeWidth]);
+    const yResultApproximation = d3.scaleLinear().range([largeHeight, 0]);
+
+    // Create axes for all charts
+    const xAxisPDF = svgPDF.append("g")
+        .attr("transform", "translate(0," + smallHeight + ")");
+    const yAxisPDF = svgPDF.append("g");
+
+    const xAxisShareWorth = svgShareWorth.append("g")
+        .attr("transform", "translate(0," + smallHeight + ")");
+    const yAxisShareWorth = svgShareWorth.append("g");
+
+    const xAxisOptionPrice = svgOptionPrice.append("g")
+        .attr("transform", "translate(0," + smallHeight + ")");
+    const yAxisOptionPrice = svgOptionPrice.append("g");
+
+    const xAxisOptionWorth = svgOptionWorth.append("g")
+        .attr("transform", "translate(0," + smallHeight + ")");
+    const yAxisOptionWorth = svgOptionWorth.append("g");
+
+    const xAxisCombinedNetWorth = svgCombinedNetWorth.append("g")
+        .attr("transform", "translate(0," + largeHeight + ")");
+    const yAxisCombinedNetWorth = svgCombinedNetWorth.append("g");
+
+    const xAxisNetWorthVsStockPrice = svgNetWorthVsStockPrice.append("g")
+        .attr("transform", "translate(0," + largeHeight + ")");
+    const yAxisNetWorthVsStockPrice = svgNetWorthVsStockPrice.append("g");
+
+    const xAxisExpectedUtility = svgExpectedUtility.append("g")
+        .attr("transform", "translate(0," + largeHeight + ")");
+    const yAxisExpectedUtility = svgExpectedUtility.append("g");
+
+    // Add axis titles for all charts
+    svgPDF.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", smallWidth)
+        .attr("y", smallHeight + margin.bottom - 5)
+        .text("Stock Price");
+
+    svgPDF.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Probability Density");
+
+    svgShareWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", smallWidth)
+        .attr("y", smallHeight + margin.bottom - 5)
+        .text("Total Share Worth");
+
+    svgShareWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Probability Density");
+
+    svgOptionPrice.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", smallWidth)
+        .attr("y", smallHeight + margin.bottom - 5)
+        .text("Stock Price");
+
+    svgOptionPrice.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Option Value");
+
+    svgOptionWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", smallWidth)
+        .attr("y", smallHeight + margin.bottom - 5)
+        .text("Stock Price");
+
+    svgOptionWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Option Worth");
+
+    svgCombinedNetWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", largeWidth)
+        .attr("y", largeHeight + margin.bottom - 5)
+        .text("Net Worth");
+
+    svgCombinedNetWorth.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Probability Density");
+
+    svgNetWorthVsStockPrice.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", largeWidth)
+        .attr("y", largeHeight + margin.bottom - 5)
+        .text("Stock Price");
+
+    svgNetWorthVsStockPrice.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Net Worth");
+
+    svgExpectedUtility.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", largeWidth)
+        .attr("y", largeHeight + margin.bottom - 5)
+        .text("Number of Option Contracts");
+
+    svgExpectedUtility.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Expected Utility");
+
+    svgResultApproximation.append("g")
+        .attr("class", "x-axis")
+        .attr("transform", `translate(0,${largeHeight})`);
+
+    svgResultApproximation.append("g")
+        .attr("class", "y-axis");
+
+    svgResultApproximation.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("x", largeWidth)
+        .attr("y", largeHeight + margin.bottom - 5)
+        .text("Number of Contracts");
+
+    svgResultApproximation.append("text")
+        .attr("class", "axis-title")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left)
+        .attr("x", 0)
+        .attr("dy", "1em")
+        .text("Net Worth");
+
+    // Add legends for Combined Net Worth and Net Worth vs Stock Price charts
+    const legendCombined = svgCombinedNetWorth.append("g")
+        .attr("class", "legend")
+        .attr("transform", "translate(" + (largeWidth - 100) + "," + 0 + ")");
+
+    legendCombined.append("rect")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", "#ff7f0e");
+
+    legendCombined.append("text")
+        .attr("x", 24)
+        .attr("y", 9)
+        .attr("dy", "0.35em")
+        .text("w/ Options");
+
+    legendCombined.append("rect")
+        .attr("x", 0)
+        .attr("y", 20)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", "#1f77b4");
+
+    legendCombined.append("text")
+        .attr("x", 24)
+        .attr("y", 29)
+        .attr("dy", "0.35em")
+        .text("w/o Options");
+
+    const legendNetWorthVsStockPrice = svgNetWorthVsStockPrice.append("g")
+        .attr("class", "legend")
+        .attr("transform", "translate(" + 10 + "," + 0 + ")");
+
+    legendNetWorthVsStockPrice.append("rect")
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", "#ff7f0e");
+
+    legendNetWorthVsStockPrice.append("text")
+        .attr("x", 24)
+        .attr("y", 9)
+        .attr("dy", "0.35em")
+        .text("w/ Options");
+
+    legendNetWorthVsStockPrice.append("rect")
+        .attr("x", 0)
+        .attr("y", 20)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", "#1f77b4");
+
+    legendNetWorthVsStockPrice.append("text")
+        .attr("x", 24)
+        .attr("y", 29)
+        .attr("dy", "0.35em")
+        .text("w/o Options");
+
+    // Function to calculate log-normal PDF
+    function logNormalPDF(x, mu, sigma) {
+        return (1 / (x * sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-Math.pow((Math.log(x) - mu), 2) / (2 * Math.pow(sigma, 2)));
+    }
+
+    // Function to calculate option value at expiration
+    function optionValue(x, strikePrice, optionPrice, optionType, interestRate) {
+        let value;
+        if (optionType === "call") {
+            value = Math.max(0, x - strikePrice) - optionPrice;
+        } else {
+            value = Math.max(0, strikePrice - x) - optionPrice;
+        }
+        // Compound the value over 4 years
+        return value * Math.pow(1 + interestRate / 100, 4);
+    }
+
+    // Function to perform Monte Carlo simulation for the combined net worth
+    function monteCarloSimulation(avgPrice, volatility, numSimulations = 500000) {
+        const sigma = volatility / 100;
+        const simulatedPrices = [];
+
+        for (let i = 0; i < numSimulations; i++) {
+            const randomSample = d3.randomNormal()();
+            const simulatedPrice = avgPrice * Math.exp(sigma * randomSample);
+            simulatedPrices.push(simulatedPrice);
+        }
+
+        return simulatedPrices;
+    }
+
+    function calculateNetWorth(simulatedPrices, numShares, strikePrice, optionPrice, numOptions, optionType, interestRate) {
+        return simulatedPrices.map(price => {
+            const stockWorth = price * numShares;
+            const optionWorth = optionValue(price, strikePrice, optionPrice, optionType, interestRate) * numOptions * 100;
+            return stockWorth + optionWorth;
+        });
+    }
+
+    // Function to calculate utility (using a power utility function)
+    function calculateUtility(wealth, gamma) {
+        if (gamma === 1) {
+            return Math.log(wealth);
+        } else {
+            return (Math.pow(wealth, 1 - gamma) - 1) / (1 - gamma);
+        }
+    }
+
+    function formatNumber(value) {
+        return d3.format(".3")(value);
+    }
+
+    function formatMoney(value) {
+        let formatted = d3.format("$.3s")(value);
+        return formatted.replace("G", "B"); // Replace G (giga) with B (billion) if necessary
+    }
+
+    function calculateProbability(data, xValue) {
+        const totalArea = d3.sum(data, d => d.y);
+        const areaBelowX = d3.sum(data.filter(d => d.x <= xValue), d => d.y);
+        return areaBelowX / totalArea;
+    }
+
+
+    let isFixed = false;
+    let fixedXValue = null;
+
+    function updateProbabilityLabels(svg, x, y, xValue, probability, isLargeChart = false) {
+        svg.selectAll(".probability-label").remove();
+        svg.selectAll(".direction-label").remove();
+            svg.selectAll(".lock-symbol").remove();
+
+        const chartWidth = isLargeChart ? largeWidth : smallWidth;
+        const chartHeight = isLargeChart ? largeHeight : smallHeight;
+
+        if (isFixed) {
+            svg.append("text")
+                .attr("class", "lock-symbol")
+                .attr("x", x(xValue) - 5)
+                .attr("y", chartHeight / 3 + 30)
+                .attr("text-anchor", "end")
+                .attr("alignment-baseline", "middle")
+                .text("🔒");
+        } else {
+            svg.append("text")
+                .attr("class", "lock-symbol")
+                .attr("x", x(xValue) - 5)
+                .attr("y", chartHeight / 3 + 30)
+                .attr("text-anchor", "end")
+                .attr("alignment-baseline", "middle")
+                .attr("font-size", "12px")
+                .attr("font-style", "italic")
+                .text("Click to lock");
+        }
+
+        svg.append("text")
+            .attr("class", "probability-label")
+            .attr("x", x(xValue) - 5)
+            .attr("y", chartHeight / 3 - 4)
+            .attr("text-anchor", "end")
+            .attr("alignment-baseline", "middle")
+            .text(`◂${formatNumber(probability * 100)}%`);
+
+        svg.append("text")
+            .attr("class", "direction-label")
+            .attr("x", x(xValue) - 5)
+            .attr("y", chartHeight / 3 + 10)
+            .attr("text-anchor", "end")
+            .attr("alignment-baseline", "middle")
+            .text("Lower");
+
+
+        svg.append("text")
+            .attr("class", "probability-label")
+            .attr("x", x(xValue) + 5)
+            .attr("y", chartHeight / 3 - 4)
+            .attr("text-anchor", "start")
+            .attr("alignment-baseline", "middle")
+            .text(`${formatNumber((1 - probability) * 100)}%▸`);
+
+        svg.append("text")
+            .attr("class", "direction-label")
+            .attr("x", x(xValue) + 5)
+            .attr("y", chartHeight / 3 + 10)
+            .attr("text-anchor", "start")
+            .attr("alignment-baseline", "middle")
+            .text("Higher");
+    }
+
+    function updateVerticalLines(xValue, pdfValues) {
+        const smallGraphX = xPDF(xValue);
+        const largeGraphX = xNetWorthVsStockPrice(xValue);
+
+        svgPDF.select(".vertical-line").attr("x1", smallGraphX).attr("x2", smallGraphX);
+        svgShareWorth.select(".vertical-line").attr("x1", smallGraphX).attr("x2", smallGraphX);
+        svgOptionPrice.select(".vertical-line").attr("x1", smallGraphX).attr("x2", smallGraphX);
+        svgOptionWorth.select(".vertical-line").attr("x1", smallGraphX).attr("x2", smallGraphX);
+        svgNetWorthVsStockPrice.select(".vertical-line").attr("x1", largeGraphX).attr("x2", largeGraphX);
+
+        const probability = calculateProbability(pdfValues, xValue);
+
+        updateProbabilityLabels(svgPDF, xPDF, yPDF, xValue, probability);
+        updateProbabilityLabels(svgShareWorth, xPDF, yShareWorth, xValue, probability);
+        updateProbabilityLabels(svgOptionPrice, xOptionPrice, yOptionPrice, xValue, probability);
+        updateProbabilityLabels(svgOptionWorth, xOptionWorth, yOptionWorth, xValue, probability);
+        updateProbabilityLabels(svgNetWorthVsStockPrice, xNetWorthVsStockPrice, yNetWorthVsStockPrice, xValue, probability, true);
+    }
+
+    // Function for updating the Expected Utility chart
+    async function updateExpectedUtilityChart(avgPrice, volatility, numShares, strikePrice, optionPrice, optionType, interestRate, baseWealth, gamma) {
+        const maxContracts = Math.ceil(numShares / 100) * 3;
+        const contractsRange = d3.range(0, maxContracts + 1);
+        const numSimulations = +d3.select("#numSimulations").property("value");
+
+        const progressIndicator = document.getElementById('progressIndicator');
+        progressIndicator.textContent = '0%';
+
+        const simulatedPrices = monteCarloSimulation(avgPrice, volatility, numSimulations);
+        const expectedUtilities = [];
+        const percentiles = d3.range(5, 100, 5);
+        const resultApproximation = [];
+
+        for (let i = 0; i < contractsRange.length; i++) {
+            const contracts = contractsRange[i];
+            const simulatedWealths = calculateNetWorth(simulatedPrices, numShares, strikePrice, optionPrice, contracts, optionType, interestRate);
+            const utilities = simulatedWealths.map(wealth => calculateUtility(baseWealth + wealth, gamma));
+
+            expectedUtilities.push({
+                contracts: contracts,
+                expectedUtility: d3.mean(utilities)
+            });
+
+            const percentileResults = {};
+            percentiles.forEach(p => {
+                percentileResults[`percentile${p}`] = d3.quantile(simulatedWealths, p / 100);
+            });
+
+            resultApproximation.push({
+                contracts: contracts,
+                ...percentileResults
+            });
+
+            const progress = Math.round((i + 1) / contractsRange.length * 100);
+            progressIndicator.textContent = `${progress}%`;
+
+            // Allow the UI to update
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        progressIndicator.textContent = '';
+
+        // Update Expected Utility Chart
+        xExpectedUtility.domain([0, maxContracts]);
+        yExpectedUtility.domain([d3.min(expectedUtilities, d => d.expectedUtility), d3.max(expectedUtilities, d => d.expectedUtility)]);
+
+        xAxisExpectedUtility.call(d3.axisBottom(xExpectedUtility).tickFormat(formatNumber));
+        yAxisExpectedUtility.call(d3.axisLeft(yExpectedUtility).tickFormat(formatNumber));
+
+        const lineExpectedUtility = d3.line()
+            .x(d => xExpectedUtility(d.contracts))
+            .y(d => yExpectedUtility(d.expectedUtility));
+
+        svgExpectedUtility.selectAll(".line")
+            .data([expectedUtilities])
+            .join("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#9467bd")
+            .attr("stroke-width", 2)
+            .attr("d", lineExpectedUtility);
+
+        const optimalContracts = d3.maxIndex(expectedUtilities, d => d.expectedUtility);
+        const optimalUtility = expectedUtilities[optimalContracts].expectedUtility;
+
+        d3.select("#expectedUtilityResults").html(`
+            <strong>Optimal number of option contracts:</strong> ${formatNumber(contractsRange[optimalContracts])}<br>
+            <strong>Expected utility at optimum:</strong> ${formatNumber(optimalUtility)}
+        `);
+
+        // Update Result Approximation Chart
+        xResultApproximation.domain([0, maxContracts]);
+        yResultApproximation.domain([
+            d3.min(resultApproximation, d => d.percentile5),
+            d3.max(resultApproximation, d => d.percentile95)
+        ]);
+
+        svgResultApproximation.select(".x-axis")
+            .call(d3.axisBottom(xResultApproximation).tickFormat(formatNumber));
+        svgResultApproximation.select(".y-axis")
+            .call(d3.axisLeft(yResultApproximation).tickFormat(d3.format("$.2s")));
+
+        const colorScale = d3.scaleSequential(d3.interpolateBlues)
+            .domain([0, percentiles.length - 1]);
+
+        percentiles.forEach((p, index) => {
+            const line = d3.line()
+                .x(d => xResultApproximation(d.contracts))
+                .y(d => yResultApproximation(d[`percentile${p}`]));
+
+            const opacity = 1 - 0.50 * Math.abs(50 - p) / 25.0;  // 50th percentile (median) has opacity 1, 5th and 95th have opacity 0.1
+            console.log(opacity);
+
+            svgResultApproximation.selectAll(`.line-percentile${p}`)
+                .data([resultApproximation])
+                .join("path")
+                .attr("class", `percentile-line line-percentile${p}`)
+                .attr("stroke", colorScale(index))
+                .style("opacity", opacity)
+                .attr("d", line);
+        });
+
+        // Add vertical lines to both charts
+        svgExpectedUtility.selectAll(".vertical-line").remove();
+        svgExpectedUtility.append("line")
+            .attr("class", "vertical-line")
+            .attr("y1", 0)
+            .attr("y2", largeHeight)
+            .style("opacity", 0);
+
+        svgResultApproximation.selectAll(".vertical-line").remove();
+        svgResultApproximation.append("line")
+            .attr("class", "vertical-line")
+            .attr("y1", 0)
+            .attr("y2", largeHeight)
+            .style("opacity", 0);
+
+        // Add legend
+        const legend = svgResultApproximation.selectAll(".legend")
+            .data(percentiles)
+            .join("g")
+            .attr("class", "legend")
+            .attr("transform", (d, i) => `translate(0,${i * 20})`);
+
+        legend.append("text")
+            .attr("x", largeWidth - 24)
+            .attr("y", 9)
+            .attr("dy", ".35em")
+            .style("text-anchor", "end")
+            .text(d => d.label);
+
+        // Add hover functionality
+        // Shared function to handle mouseover events for both graphs
+        function handleMouseover(event, svg, xScale, data) {
+            const [mouseX] = d3.pointer(event, svg.node());
+            const contracts = xScale.invert(mouseX);
+            const closestDataPoint = data.reduce((prev, curr) =>
+                Math.abs(curr.contracts - contracts) < Math.abs(prev.contracts - contracts) ? curr : prev
+            );
+
+            svg.select(".vertical-line")
+                .attr("x1", xScale(closestDataPoint.contracts))
+                .attr("x2", xScale(closestDataPoint.contracts))
+                .style("opacity", 1);
+
+            svgExpectedUtility.select(".vertical-line")
+                .attr("x1", xExpectedUtility(closestDataPoint.contracts))
+                .attr("x2", xExpectedUtility(closestDataPoint.contracts))
+                .style("opacity", 1);
+
+            svgResultApproximation.select(".vertical-line")
+                .attr("x1", xResultApproximation(closestDataPoint.contracts))
+                .attr("x2", xResultApproximation(closestDataPoint.contracts))
+                .style("opacity", 1);
+
+            const tooltipContent = `
+                <strong>Contracts:</strong> ${formatNumber(closestDataPoint.contracts)}<br>
+                <strong>Expected Utility:</strong> ${formatNumber(closestDataPoint.expectedUtility)}<br>
+                <strong>Net Worth (5th percentile):</strong> ${formatMoney(closestDataPoint.percentile5)}<br>
+                <strong>Net Worth (Median):</strong> ${formatMoney(closestDataPoint.percentile50)}<br>
+                <strong>Net Worth (95th percentile):</strong> ${formatMoney(closestDataPoint.percentile95)}
+            `;
+
+            d3.select("#tooltip")
+                .style("opacity", 1)
+                .style("left", `${event.pageX + 15}px`)
+                .style("top", `${event.pageY - 28}px`)
+                .html(tooltipContent);
+        }
+
+        function handleMouseout() {
+            svgExpectedUtility.select(".vertical-line").style("opacity", 0);
+            svgResultApproximation.select(".vertical-line").style("opacity", 0);
+            d3.select("#tooltip").style("opacity", 0);
+        }
+
+        // Add mouseover functionality to Expected Utility chart
+        svgExpectedUtility.append("rect")
+            .attr("class", "overlay")
+            .attr("width", largeWidth)
+            .attr("height", largeHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", () => d3.select("#tooltip").style("opacity", 1))
+            .on("mouseout", handleMouseout)
+            .on("mousemove", (event) => handleMouseover(event, svgExpectedUtility, xExpectedUtility, expectedUtilities));
+
+        // Add mouseover functionality to Result Approximation chart
+        svgResultApproximation.append("rect")
+            .attr("class", "overlay")
+            .attr("width", largeWidth)
+            .attr("height", largeHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", () => d3.select("#tooltip").style("opacity", 1))
+            .on("mouseout", handleMouseout)
+            .on("mousemove", (event) => handleMouseover(event, svgResultApproximation, xResultApproximation, resultApproximation));
+
+
+    }
+
+    // Function to update the density plot
+    function updateDensityPlot(avgPrice, volatility, numShares, strikePrice, optionPrice, numOptions, optionType, interestRate, baseWealth, gamma, animate = true) {
+        // Calculate mu and sigma for the log-normal distribution
+        const mu = Math.log(avgPrice) - 0.5 * Math.pow(volatility / 100, 2);
+        const sigma = volatility / 100;
+
+        // Generate data points for the PDF curve
+        const minXValue = avgPrice * 0.4;
+        const maxXValue = avgPrice * 2.0;
+        const numBuckets = 300;
+        const xValues = d3.range(minXValue, maxXValue, (maxXValue - minXValue) / numBuckets);
+        const pdfValues = xValues.map(x => ({ x: x, y: logNormalPDF(x, mu, sigma) }));
+        const shareWorthValues = xValues.map(x => ({ x: x * numShares, y: logNormalPDF(x, mu, sigma) }));
+        const optionPriceValues = xValues.map(x => ({ x: x, y: optionValue(x, strikePrice, optionPrice, optionType, interestRate) }));
+        const optionWorthValues = xValues.map(x => ({ x: x, y: optionValue(x, strikePrice, optionPrice, optionType, interestRate) * numOptions * 100 }));
+        const netWorthWithoutOptions = xValues.map(x => ({ x: x, y: x * numShares }));
+        const netWorthWithOptions = xValues.map(x => ({ x: x, y: x * numShares + optionValue(x, strikePrice, optionPrice, optionType, interestRate) * numOptions * 100 }));
+
+        // Perform Monte Carlo simulation for the combined net worth
+        const simulatedPrices = monteCarloSimulation(avgPrice, volatility);
+        const simulatedNetWorths = calculateNetWorth(simulatedPrices, numShares, strikePrice, optionPrice, numOptions, optionType, interestRate);
+
+        // Generate histogram data for the combined net worth
+        const histogram = d3.histogram()
+            .domain([d3.min(shareWorthValues, d => d.x), d3.max(shareWorthValues, d => d.x)])
+            .thresholds(shareWorthValues.map(d => d.x))(simulatedNetWorths);
+
+        const combinedNetWorthValues = histogram.map(bin => ({ x: (bin.x0 + bin.x1) / 2, y: bin.length / simulatedNetWorths.length }));
+
+        // Normalize y-values for probability density to sum up to 1
+        const normalize = (values) => {
+            const totalArea = d3.sum(values, d => d.y);
+            return values.map(d => ({ x: d.x, y: d.y / totalArea }));
+        };
+
+        const normalizedPdfValues = normalize(pdfValues);
+        const normalizedShareWorthValues = normalize(shareWorthValues);
+        const normalizedCombinedNetWorthValues = normalize(combinedNetWorthValues);
+
+        // Calculate expected utility for different numbers of option contracts
+        const maxContracts = Math.ceil(numShares / 100) * 6;
+        const contractSteps = 20;
+        const contractsRange = d3.range(0, maxContracts + 1, maxContracts / contractSteps);
+
+        // Update x scales
+        xPDF.domain([avgPrice * 0.4, avgPrice * 2]);
+        xShareWorth.domain([d3.min(normalizedShareWorthValues, d => d.x), d3.max(normalizedShareWorthValues, d => d.x)]);
+        xOptionPrice.domain([avgPrice * 0.4, avgPrice * 2]);
+        xOptionWorth.domain([avgPrice * 0.4, avgPrice * 2]);
+        xCombinedNetWorth.domain([d3.min([...normalizedShareWorthValues, ...normalizedCombinedNetWorthValues], d => d.x), d3.max([...normalizedShareWorthValues, ...normalizedCombinedNetWorthValues], d => d.x)]);
+        xNetWorthVsStockPrice.domain([avgPrice * 0.4, avgPrice * 2]);
+
+        // Update y scales
+        yPDF.domain([0, d3.max(normalizedPdfValues, d => d.y)]);
+        yShareWorth.domain([0, d3.max(normalizedShareWorthValues, d => d.y)]);
+        yOptionPrice.domain([d3.min(optionPriceValues, d => d.y), d3.max(optionPriceValues, d => d.y)]);
+        yOptionWorth.domain([d3.min(optionWorthValues, d => d.y), d3.max(optionWorthValues, d => d.y)]);
+        yCombinedNetWorth.domain([0, d3.max([d3.max(normalizedShareWorthValues, d => d.y), d3.max(normalizedCombinedNetWorthValues, d => d.y)])]);
+        yNetWorthVsStockPrice.domain([0, d3.max(netWorthWithOptions, d => d.y)]);
+
+        // Format for axes
+        const format = d3.format("$.2s");
+
+        // Update PDF axes
+        xAxisPDF.call(d3.axisBottom(xPDF));
+        yAxisPDF.call(d3.axisLeft(yPDF));
+
+        // Update Share Worth axes
+        xAxisShareWorth.call(d3.axisBottom(xShareWorth).tickFormat(format));
+        yAxisShareWorth.call(d3.axisLeft(yShareWorth));
+
+        // Update Option Price axes
+        xAxisOptionPrice.call(d3.axisBottom(xOptionPrice));
+        yAxisOptionPrice.call(d3.axisLeft(yOptionPrice));
+
+        // Update Option Worth axes
+        xAxisOptionWorth.call(d3.axisBottom(xOptionWorth));
+        yAxisOptionWorth.call(d3.axisLeft(yOptionWorth).tickFormat(format));
+
+        // Update Combined Net Worth axes
+        xAxisCombinedNetWorth.call(d3.axisBottom(xCombinedNetWorth).tickFormat(format));
+        yAxisCombinedNetWorth.call(d3.axisLeft(yCombinedNetWorth));
+
+        // Update Net Worth vs Stock Price axes
+        xAxisNetWorthVsStockPrice.call(d3.axisBottom(xNetWorthVsStockPrice).tickFormat(format));
+        yAxisNetWorthVsStockPrice.call(d3.axisLeft(yNetWorthVsStockPrice).tickFormat(format));
+
+        // Bind data to the density curve
+        const linePDF = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xPDF(d.x))
+            .y(d => yPDF(d.y));
+
+        const areaPDF = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xPDF(d.x))
+            .y0(smallHeight)
+            .y1(d => yPDF(d.y));
+
+        const lineShareWorth = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xShareWorth(d.x))
+            .y(d => yShareWorth(d.y));
+
+        const areaShareWorth = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xShareWorth(d.x))
+            .y0(smallHeight)
+            .y1(d => yShareWorth(d.y));
+
+        const lineOptionPrice = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xOptionPrice(d.x))
+            .y(d => yOptionPrice(d.y));
+
+        const areaOptionPrice = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xOptionPrice(d.x))
+            .y0(d => yOptionPrice(0))
+            .y1(d => yOptionPrice(d.y));
+
+        const lineOptionWorth = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xOptionWorth(d.x))
+            .y(d => yOptionWorth(d.y));
+
+        const areaOptionWorth = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xOptionWorth(d.x))
+            .y0(d => yOptionWorth(0))
+            .y1(d => yOptionWorth(d.y));
+
+        const lineNetWorthWithoutOptions = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xCombinedNetWorth(d.x))
+            .y(d => yCombinedNetWorth(d.y));
+
+        const areaNetWorthWithoutOptions = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xCombinedNetWorth(d.x))
+            .y0(largeHeight)
+            .y1(d => yCombinedNetWorth(d.y));
+
+        const lineNetWorthWithOptions = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xCombinedNetWorth(d.x))
+            .y(d => yCombinedNetWorth(d.y));
+
+        const areaNetWorthWithOptions = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xCombinedNetWorth(d.x))
+            .y0(largeHeight)
+            .y1(d => yCombinedNetWorth(d.y));
+
+        const lineNetWorthVsStockPriceWithoutOptions = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xNetWorthVsStockPrice(d.x))
+            .y(d => yNetWorthVsStockPrice(d.y));
+
+        const areaNetWorthVsStockPriceWithoutOptions = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xNetWorthVsStockPrice(d.x))
+            .y0(largeHeight)
+            .y1(d => yNetWorthVsStockPrice(d.y));
+
+        const lineNetWorthVsStockPriceWithOptions = d3.line()
+            .curve(d3.curveBasis)
+            .x(d => xNetWorthVsStockPrice(d.x))
+            .y(d => yNetWorthVsStockPrice(d.y));
+
+        const areaNetWorthVsStockPriceWithOptions = d3.area()
+            .curve(d3.curveBasis)
+            .x(d => xNetWorthVsStockPrice(d.x))
+            .y0(largeHeight)
+            .y1(d => yNetWorthVsStockPrice(d.y));
+
+        const pathPDF = svgPDF.selectAll(".line")
+            .data([normalizedPdfValues]);
+
+        const fillAreaPDF = svgPDF.selectAll(".area")
+            .data([normalizedPdfValues]);
+
+        const pathShareWorth = svgShareWorth.selectAll(".line")
+            .data([normalizedShareWorthValues]);
+
+        const fillAreaShareWorth = svgShareWorth.selectAll(".area")
+            .data([normalizedShareWorthValues]);
+
+        const pathOptionPrice = svgOptionPrice.selectAll(".line")
+            .data([optionPriceValues]);
+
+        const fillAreaOptionPrice = svgOptionPrice.selectAll(".area")
+            .data([optionPriceValues]);
+
+        const pathOptionWorth = svgOptionWorth.selectAll(".line")
+            .data([optionWorthValues]);
+
+        const fillAreaOptionWorth = svgOptionWorth.selectAll(".area")
+            .data([optionWorthValues]);
+
+        const pathNetWorthWithoutOptions = svgCombinedNetWorth.selectAll(".line.netWorthWithoutOptions")
+            .data([normalizedShareWorthValues]);
+
+        const fillAreaNetWorthWithoutOptions = svgCombinedNetWorth.selectAll(".area.netWorthWithoutOptions")
+            .data([normalizedShareWorthValues]);
+
+        const pathNetWorthWithOptions = svgCombinedNetWorth.selectAll(".line.netWorthWithOptions")
+            .data([normalizedCombinedNetWorthValues]);
+
+        const fillAreaNetWorthWithOptions = svgCombinedNetWorth.selectAll(".area.netWorthWithOptions")
+            .data([normalizedCombinedNetWorthValues]);
+
+        const pathNetWorthVsStockPriceWithoutOptions = svgNetWorthVsStockPrice.selectAll(".line.netWorthWithoutOptions")
+            .data([netWorthWithoutOptions]);
+
+        const fillAreaNetWorthVsStockPriceWithoutOptions = svgNetWorthVsStockPrice.selectAll(".area.netWorthWithoutOptions")
+            .data([netWorthWithoutOptions]);
+
+        const pathNetWorthVsStockPriceWithOptions = svgNetWorthVsStockPrice.selectAll(".line.netWorthWithOptions")
+            .data([netWorthWithOptions]);
+
+        const fillAreaNetWorthVsStockPriceWithOptions = svgNetWorthVsStockPrice.selectAll(".area.netWorthWithOptions")
+            .data([netWorthWithOptions]);
+
+        // Enter and update PDF chart
+        fillAreaPDF.enter().append("path")
+            .attr("class", "area")
+            .attr("fill", "#69b3a2")
+            .attr("opacity", 0.5)
+            .merge(fillAreaPDF)
+            .attr("d", areaPDF);
+
+        pathPDF.enter().append("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#69b3a2")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathPDF)
+            .attr("d", linePDF);
+
+        // Enter and update Share Worth chart
+        fillAreaShareWorth.enter().append("path")
+            .attr("class", "area")
+            .attr("fill", "#69b3a2")
+            .attr("opacity", 0.5)
+            .merge(fillAreaShareWorth)
+            .attr("d", areaShareWorth);
+
+        pathShareWorth.enter().append("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#69b3a2")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathShareWorth)
+            .attr("d", lineShareWorth);
+
+        // Enter and update Option Price chart
+        fillAreaOptionPrice.enter().append("path")
+            .attr("class", "area")
+            .attr("fill", "#ff7f0e")
+            .attr("opacity", 0.5)
+            .merge(fillAreaOptionPrice)
+            .attr("d", areaOptionPrice);
+
+        pathOptionPrice.enter().append("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#ff7f0e")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathOptionPrice)
+            .attr("d", lineOptionPrice);
+
+        // Enter and update Option Worth chart
+        fillAreaOptionWorth.enter().append("path")
+            .attr("class", "area")
+            .attr("fill", "#ff7f0e")
+            .attr("opacity", 0.5)
+            .merge(fillAreaOptionWorth)
+            .attr("d", areaOptionWorth);
+
+        pathOptionWorth.enter().append("path")
+            .attr("class", "line")
+            .attr("fill", "none")
+            .attr("stroke", "#ff7f0e")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathOptionWorth)
+            .attr("d", lineOptionWorth);
+
+        // Enter and update Combined Net Worth chart for net worth without options
+        fillAreaNetWorthWithoutOptions.enter().append("path")
+            .attr("class", "area netWorthWithoutOptions")
+            .attr("fill", "#1f77b4")
+            .attr("opacity", 0.5)
+            .merge(fillAreaNetWorthWithoutOptions)
+            .attr("d", areaNetWorthWithoutOptions);
+
+        pathNetWorthWithoutOptions.enter().append("path")
+            .attr("class", "line netWorthWithoutOptions")
+            .attr("fill", "none")
+            .attr("stroke", "#1f77b4")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathNetWorthWithoutOptions)
+            .attr("d", lineNetWorthWithoutOptions);
+
+        // Enter and update Combined Net Worth chart for net worth with options
+        fillAreaNetWorthWithOptions.enter().append("path")
+            .attr("class", "area netWorthWithOptions")
+            .attr("fill", "#ff7f0e")
+            .attr("opacity", 0.5)
+            .merge(fillAreaNetWorthWithOptions)
+            .attr("d", areaNetWorthWithOptions);
+
+        pathNetWorthWithOptions.enter().append("path")
+            .attr("class", "line netWorthWithOptions")
+            .attr("fill", "none")
+            .attr("stroke", "#ff7f0e")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathNetWorthWithOptions)
+            .attr("d", lineNetWorthWithOptions);
+
+        // Enter and update Net Worth vs Stock Price chart for net worth without options
+        fillAreaNetWorthVsStockPriceWithoutOptions.enter().append("path")
+            .attr("class", "area netWorthWithoutOptions")
+            .attr("fill", "#1f77b4")
+            .attr("opacity", 0.5)
+            .merge(fillAreaNetWorthVsStockPriceWithoutOptions)
+            .attr("d", areaNetWorthVsStockPriceWithoutOptions);
+
+        pathNetWorthVsStockPriceWithoutOptions.enter().append("path")
+            .attr("class", "line netWorthWithoutOptions")
+            .attr("fill", "none")
+            .attr("stroke", "#1f77b4")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathNetWorthVsStockPriceWithoutOptions)
+            .attr("d", lineNetWorthVsStockPriceWithoutOptions);
+
+        // Enter and update Net Worth vs Stock Price chart for net worth with options
+        fillAreaNetWorthVsStockPriceWithOptions.enter().append("path")
+            .attr("class", "area netWorthWithOptions")
+            .attr("fill", "#ff7f0e")
+            .attr("opacity", 0.5)
+            .merge(fillAreaNetWorthVsStockPriceWithOptions)
+            .attr("d", areaNetWorthVsStockPriceWithOptions);
+
+        pathNetWorthVsStockPriceWithOptions.enter().append("path")
+            .attr("class", "line netWorthWithOptions")
+            .attr("fill", "none")
+            .attr("stroke", "#ff7f0e")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .merge(pathNetWorthVsStockPriceWithOptions)
+            .attr("d", lineNetWorthVsStockPriceWithOptions);
+
+        // Draw a horizontal line at y = 0
+        svgOptionPrice.selectAll(".zero-line").remove();  // Remove the existing line first
+        svgOptionPrice.append("line")
+            .attr("class", "zero-line")
+            .attr("x1", 0)
+            .attr("x2", smallWidth)
+            .attr("y1", yOptionPrice(0))
+            .attr("y2", yOptionPrice(0))
+            .attr("stroke", "black")
+            .attr("stroke-width", 1);
+
+        // Draw a horizontal line at y = 0
+        svgOptionWorth.selectAll(".zero-line").remove();  // Remove the existing line first
+        svgOptionWorth.append("line")
+            .attr("class", "zero-line")
+            .attr("x1", 0)
+            .attr("x2", smallWidth)
+            .attr("y1", yOptionWorth(0))
+            .attr("y2", yOptionWorth(0))
+            .attr("stroke", "black")
+            .attr("stroke-width", 1);
+
+        if (animate) {
+            fillAreaPDF.transition().duration(1000).attr("d", areaPDF);
+            pathPDF.transition().duration(1000).attr("d", linePDF);
+            fillAreaShareWorth.transition().duration(1000).attr("d", areaShareWorth);
+            pathShareWorth.transition().duration(1000).attr("d", lineShareWorth);
+            fillAreaOptionPrice.transition().duration(1000).attr("d", areaOptionPrice);
+            pathOptionPrice.transition().duration(1000).attr("d", lineOptionPrice);
+            fillAreaOptionWorth.transition().duration(1000).attr("d", areaOptionWorth);
+            pathOptionWorth.transition().duration(1000).attr("d", lineOptionWorth);
+            fillAreaNetWorthWithoutOptions.transition().duration(1000).attr("d", areaNetWorthWithoutOptions);
+            pathNetWorthWithoutOptions.transition().duration(1000).attr("d", lineNetWorthWithoutOptions);
+            fillAreaNetWorthWithOptions.transition().duration(1000).attr("d", areaNetWorthWithOptions);
+            pathNetWorthWithOptions.transition().duration(1000).attr("d", lineNetWorthWithOptions);
+            fillAreaNetWorthVsStockPriceWithoutOptions.transition().duration(1000).attr("d", areaNetWorthVsStockPriceWithoutOptions);
+            pathNetWorthVsStockPriceWithoutOptions.transition().duration(1000).attr("d", lineNetWorthVsStockPriceWithoutOptions);
+            fillAreaNetWorthVsStockPriceWithOptions.transition().duration(1000).attr("d", areaNetWorthVsStockPriceWithOptions);
+            pathNetWorthVsStockPriceWithOptions.transition().duration(1000).attr("d", lineNetWorthVsStockPriceWithOptions);
+        } else {
+            fillAreaPDF.attr("d", areaPDF);
+            pathPDF.attr("d", linePDF);
+            fillAreaShareWorth.attr("d", areaShareWorth);
+            pathShareWorth.attr("d", lineShareWorth);
+            fillAreaOptionPrice.attr("d", areaOptionPrice);
+            pathOptionPrice.attr("d", lineOptionPrice);
+            fillAreaOptionWorth.attr("d", areaOptionWorth);
+            pathOptionWorth.attr("d", lineOptionWorth);
+            fillAreaNetWorthWithoutOptions.attr("d", areaNetWorthWithoutOptions);
+            pathNetWorthWithoutOptions.attr("d", lineNetWorthWithoutOptions);
+            fillAreaNetWorthWithOptions.attr("d", areaNetWorthWithOptions);
+            pathNetWorthWithOptions.attr("d", lineNetWorthWithOptions);
+            fillAreaNetWorthVsStockPriceWithoutOptions.attr("d", areaNetWorthVsStockPriceWithoutOptions);
+            pathNetWorthVsStockPriceWithoutOptions.attr("d", lineNetWorthVsStockPriceWithoutOptions);
+            fillAreaNetWorthVsStockPriceWithOptions.attr("d", areaNetWorthVsStockPriceWithOptions);
+            pathNetWorthVsStockPriceWithOptions.attr("d", lineNetWorthVsStockPriceWithOptions);
+        }
+
+        // Exit
+        pathPDF.exit().remove();
+        fillAreaPDF.exit().remove();
+        pathShareWorth.exit().remove();
+        fillAreaShareWorth.exit().remove();
+        pathOptionPrice.exit().remove();
+        fillAreaOptionPrice.exit().remove();
+        pathOptionWorth.exit().remove();
+        fillAreaOptionWorth.exit().remove();
+        pathNetWorthWithoutOptions.exit().remove();
+        fillAreaNetWorthWithoutOptions.exit().remove();
+        pathNetWorthWithOptions.exit().remove();
+        fillAreaNetWorthWithOptions.exit().remove();
+        pathNetWorthVsStockPriceWithoutOptions.exit().remove();
+        fillAreaNetWorthVsStockPriceWithoutOptions.exit().remove();
+        pathNetWorthVsStockPriceWithOptions.exit().remove();
+        fillAreaNetWorthVsStockPriceWithOptions.exit().remove();
+
+        // Add mouseover lines and tooltips for all charts
+        const mouseLinePDF = svgPDF.append("line")
+            .attr("class", "mouse-line")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4 4")
+            .attr("opacity", 0);
+
+        const mouseLineShareWorth = svgShareWorth.append("line")
+            .attr("class", "mouse-line")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4 4")
+            .attr("opacity", 0);
+
+        const mouseLineOptionPrice = svgOptionPrice.append("line")
+            .attr("class", "mouse-line")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4 4")
+            .attr("opacity", 0);
+
+        const mouseLineOptionWorth = svgOptionWorth.append("line")
+            .attr("class", "mouse-line")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4 4")
+            .attr("opacity", 0);
+
+        const mouseLineNetWorthVsStockPrice = svgNetWorthVsStockPrice.append("line")
+            .attr("class", "mouse-line")
+            .attr("stroke", "black")
+            .attr("stroke-width", 1)
+            .attr("stroke-dasharray", "4 4")
+            .attr("opacity", 0);
+
+        const tooltip = d3.select("#tooltip");
+
+        // Add vertical lines to all charts
+        svgPDF.append("line").attr("class", "vertical-line").attr("y1", 0).attr("y2", smallHeight);
+        svgShareWorth.append("line").attr("class", "vertical-line").attr("y1", 0).attr("y2", smallHeight);
+        svgOptionPrice.append("line").attr("class", "vertical-line").attr("y1", 0).attr("y2", smallHeight);
+        svgOptionWorth.append("line").attr("class", "vertical-line").attr("y1", 0).attr("y2", smallHeight);
+        svgNetWorthVsStockPrice.append("line").attr("class", "vertical-line").attr("y1", 0).attr("y2", largeHeight);
+
+        function mouseover(event) {
+            mouseLinePDF.attr("opacity", 1);
+            mouseLineShareWorth.attr("opacity", 1);
+            mouseLineOptionPrice.attr("opacity", 1);
+            mouseLineOptionWorth.attr("opacity", 1);
+            mouseLineNetWorthVsStockPrice.attr("opacity", 1);
+            d3.select("#tooltip").style("opacity", 1);
+        }
+
+        function mouseout(event) {
+            mouseLinePDF.attr("opacity", 0);
+            mouseLineShareWorth.attr("opacity", 0);
+            mouseLineOptionPrice.attr("opacity", 0);
+            mouseLineOptionWorth.attr("opacity", 0);
+            mouseLineNetWorthVsStockPrice.attr("opacity", 0);
+            d3.select("#tooltip").style("opacity", 0);
+        }
+
+        function mousemove(event, graphType) {
+            let xValue, mouseX;
+
+            if (!isFixed) {
+                if (graphType === 'netWorthVsStockPrice') {
+                    [mouseX] = d3.pointer(event, svgNetWorthVsStockPrice.node());
+                    xValue = xNetWorthVsStockPrice.invert(mouseX);
+                } else {
+                    [mouseX] = d3.pointer(event);
+                    xValue = xPDF.invert(mouseX);
+                }
+            } else {
+                xValue = fixedXValue;
+            }
+            updateVerticalLines(xValue, pdfValues);
+
+            const netWorthWithoutOptions = xValue * numShares;
+            const netWorthWithOptions = netWorthWithoutOptions + optionValue(xValue, strikePrice, optionPrice, optionType, interestRate) * numOptions * 100;
+
+            // Calculate probabilities
+            const probabilityBelow = calculateProbability(pdfValues, xValue);
+            const probabilityAbove = 1 - probabilityBelow;
+
+            d3.select("#tooltip")
+                .style("left", `${event.pageX + 15}px`)
+                .style("top", `${event.pageY - 28}px`)
+                .html(`
+                    <strong>Stock Price:</strong> ${formatMoney(xValue)}<br>
+                    <strong>Probability Below:</strong> ${formatNumber(probabilityBelow * 100)}%<br>
+                    <strong>Probability Above:</strong> ${formatNumber(probabilityAbove * 100)}%<br>
+                    <strong>Net Worth (without options):</strong> ${formatMoney(netWorthWithoutOptions)}<br>
+                    <strong>Net Worth (with options):</strong> ${formatMoney(netWorthWithOptions)}
+                `);
+        }
+
+        function click(event, graphType) {
+            let xValue, mouseX;
+
+            if (graphType === 'netWorthVsStockPrice') {
+                [mouseX] = d3.pointer(event, svgNetWorthVsStockPrice.node());
+                xValue = xNetWorthVsStockPrice.invert(mouseX);
+            } else {
+                [mouseX] = d3.pointer(event);
+                xValue = xPDF.invert(mouseX);
+            }
+
+            if (isFixed) {
+                isFixed = false;
+                fixedXValue = null;
+            } else {
+                isFixed = true;
+                fixedXValue = xValue;
+            }
+            updateVerticalLines(xValue, pdfValues);
+        }
+
+        const overlayHandler = (graphType) => {
+            return {
+                mousemove: (event) => mousemove(event, graphType),
+                click: (event) => click(event, graphType)
+            };
+        };
+
+        svgPDF
+            .append("rect")
+            .attr("class", "overlay")
+            .attr("width", smallWidth)
+            .attr("height", smallHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", (event) => mouseover(event, 'pdf'))
+            .on("mouseout", (event) => mouseout(event, 'pdf'))
+            .on("mousemove", (event) => mousemove(event, 'pdf'));
+
+        svgShareWorth
+            .append("rect")
+            .attr("class", "overlay")
+            .attr("width", smallWidth)
+            .attr("height", smallHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", (event) => mouseover(event, 'shareWorth'))
+            .on("mouseout", (event) => mouseout(event, 'shareWorth'))
+            .on("mousemove", (event) => mousemove(event, 'shareWorth'));
+
+        svgOptionPrice
+            .append("rect")
+            .attr("class", "overlay")
+            .attr("width", smallWidth)
+            .attr("height", smallHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", (event) => mouseover(event, 'optionPrice'))
+            .on("mouseout", (event) => mouseout(event, 'optionPrice'))
+            .on("mousemove", (event) => mousemove(event, 'optionPrice'));
+
+        svgOptionWorth
+            .append("rect")
+            .attr("class", "overlay")
+            .attr("width", smallWidth)
+            .attr("height", smallHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", (event) => mouseover(event, 'optionWorth'))
+            .on("mouseout", (event) => mouseout(event, 'optionWorth'))
+            .on("mousemove", (event) => mousemove(event, 'optionWorth'));
+
+        svgNetWorthVsStockPrice
+            .append("rect")
+            .attr("class", "overlay")
+            .attr("width", largeWidth)
+            .attr("height", largeHeight)
+            .style("fill", "none")
+            .style("pointer-events", "all")
+            .on("mouseover", (event) => mouseover(event, 'netWorthVsStockPrice'))
+            .on("mouseout", (event) => mouseout(event, 'netWorthVsStockPrice'))
+            .on("mousemove", (event) => mousemove(event, 'netWorthVsStockPrice'));
+
+        svgPDF.select(".overlay")
+            .on("mousemove", overlayHandler('pdf').mousemove)
+            .on("click", overlayHandler('pdf').click);
+
+        svgShareWorth.select(".overlay")
+            .on("mousemove", overlayHandler('shareWorth').mousemove)
+            .on("click", overlayHandler('shareWorth').click);
+
+        svgOptionPrice.select(".overlay")
+            .on("mousemove", overlayHandler('optionPrice').mousemove)
+            .on("click", overlayHandler('optionPrice').click);
+
+        svgOptionWorth.select(".overlay")
+            .on("mousemove", overlayHandler('optionWorth').mousemove)
+            .on("click", overlayHandler('optionWorth').click);
+
+        svgNetWorthVsStockPrice.select(".overlay")
+            .on("mousemove", overlayHandler('netWorthVsStockPrice').mousemove)
+            .on("click", overlayHandler('netWorthVsStockPrice').click);
+    }
+
+    // Update on input change
+    function updateAllCharts() {
+        const avgPrice = +d3.select("#avgPrice").property("value");
+        const volatility = +d3.select("#volatility").property("value");
+        const numShares = +d3.select("#numShares").property("value");
+        const strikePrice = +d3.select("#strikePrice").property("value");
+        const optionPrice = +d3.select("#optionPrice").property("value");
+        const numOptions = +d3.select("#numOptions").property("value");
+        const optionType = d3.select("#optionType").property("value");
+        const interestRate = +d3.select("#interestRate").property("value");
+        const baseWealth = +d3.select("#baseWealth").property("value");
+        const gamma = +d3.select("#gamma").property("value");
+        d3.select("#volatilityValue").text(volatility + "%");
+        updateDensityPlot(avgPrice, volatility, numShares, strikePrice, optionPrice, numOptions, optionType, interestRate, baseWealth, gamma, false);
+    }
+
+    // Add event listener for the Calculate Utility button. Also, trigger it the first time on page load
+    const calculateUtilityBtn = document.getElementById('calculateUtilityBtn');
+
+    // Set default option type to "Put"
+    document.getElementById('optionType').value = 'put';
+
+    // Update event listener for Calculate Utility button
+    calculateUtilityBtn.addEventListener('click', function() {
+        const avgPrice = +d3.select("#avgPrice").property("value");
+        const volatility = +d3.select("#volatility").property("value");
+        const numShares = +d3.select("#numShares").property("value");
+        const strikePrice = +d3.select("#strikePrice").property("value");
+        const optionPrice = +d3.select("#optionPrice").property("value");
+        const optionType = d3.select("#optionType").property("value");
+        const interestRate = +d3.select("#interestRate").property("value");
+        const baseWealth = +d3.select("#baseWealth").property("value");
+        const gamma = +d3.select("#gamma").property("value");
+        updateExpectedUtilityChart(avgPrice, volatility, numShares, strikePrice, optionPrice, optionType, interestRate, baseWealth, gamma);
+    });
+    calculateUtilityBtn.click()
+
+    // Initial update
+    updateDensityPlot(535, 15, 2000, 500, 12.8, 20, "put", 5.25, 10000, 2);
+
+    // Update all input event listeners to use the new updateAllCharts function
+    d3.selectAll("#avgPrice, #volatility, #numShares, #strikePrice, #optionPrice, #numOptions, #optionType, #interestRate, #baseWealth, #gamma")
+        .on("input change", updateAllCharts);
+</script>
+</body>
+</html>
